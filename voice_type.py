@@ -1,72 +1,81 @@
-"""Minimal Windows dictation tray app using local faster-whisper transcription."""
+"""Menu bar dictation app using local faster-whisper transcription."""
 
 from __future__ import annotations
 
-import ctypes
 import sys
 import threading
-from ctypes import wintypes
 from typing import Optional
 
-if sys.platform != "win32":
-    raise SystemExit("VoiceType MVP currently supports Windows 10/11 only.")
-
-import keyboard
 import numpy as np
 import pystray
 import sounddevice as sd
 from faster_whisper import WhisperModel
 from PIL import Image, ImageDraw
 
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
 
-HOTKEY = "ctrl+alt+space"
+    import keyboard
+
+elif sys.platform == "darwin":
+    from pynput import keyboard
+
+else:
+    raise SystemExit("VoiceType currently supports macOS 12+ and Windows 10/11.")
+
+HOTKEY = "ctrl+alt+space" if sys.platform == "win32" else "<ctrl>+<alt>+<space>"
+HOTKEY_LABEL = "Ctrl+Alt+Space" if sys.platform == "win32" else "Control+Option+Space"
 SAMPLE_RATE = 16_000
 MODEL_NAME = "base.en"
 
-KEYEVENTF_KEYUP = 0x0002
-KEYEVENTF_UNICODE = 0x0004
-INPUT_KEYBOARD = 1
+if sys.platform == "win32":
+    KEYEVENTF_KEYUP = 0x0002
+    KEYEVENTF_UNICODE = 0x0004
+    INPUT_KEYBOARD = 1
 
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", wintypes.WORD),
+            ("wScan", wintypes.WORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
 
-class KEYBDINPUT(ctypes.Structure):
-    _fields_ = [
-        ("wVk", wintypes.WORD),
-        ("wScan", wintypes.WORD),
-        ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.c_size_t),
-    ]
+    class INPUT_UNION(ctypes.Union):
+        _fields_ = [("ki", KEYBDINPUT)]
 
-
-class INPUT_UNION(ctypes.Union):
-    _fields_ = [("ki", KEYBDINPUT)]
-
-
-class INPUT(ctypes.Structure):
-    _fields_ = [("type", wintypes.DWORD), ("union", INPUT_UNION)]
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", wintypes.DWORD), ("union", INPUT_UNION)]
 
 
 def type_at_cursor(text: str) -> None:
-    """Type Unicode text through Windows SendInput without changing clipboard."""
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    send_input = user32.SendInput
-    send_input.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
-    send_input.restype = wintypes.UINT
+    """Type Unicode text at the cursor without changing the clipboard."""
+    if sys.platform == "win32":
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        send_input = user32.SendInput
+        send_input.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
+        send_input.restype = wintypes.UINT
 
-    # SendInput's Unicode mode takes UTF-16 code units, including surrogate pairs.
-    units = text.encode("utf-16-le", errors="replace")
-    for offset in range(0, len(units), 2):
-        code_unit = int.from_bytes(units[offset : offset + 2], "little")
-        events = (INPUT * 2)()
-        events[0].type = INPUT_KEYBOARD
-        events[0].union.ki = KEYBDINPUT(0, code_unit, KEYEVENTF_UNICODE, 0, 0)
-        events[1].type = INPUT_KEYBOARD
-        events[1].union.ki = KEYBDINPUT(
-            0, code_unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, 0
-        )
-        sent = send_input(2, events, ctypes.sizeof(INPUT))
-        if sent != 2:
-            raise ctypes.WinError(ctypes.get_last_error())
+        # SendInput's Unicode mode takes UTF-16 code units, including surrogate pairs.
+        units = text.encode("utf-16-le", errors="replace")
+        for offset in range(0, len(units), 2):
+            code_unit = int.from_bytes(units[offset : offset + 2], "little")
+            events = (INPUT * 2)()
+            events[0].type = INPUT_KEYBOARD
+            events[0].union.ki = KEYBDINPUT(0, code_unit, KEYEVENTF_UNICODE, 0, 0)
+            events[1].type = INPUT_KEYBOARD
+            events[1].union.ki = KEYBDINPUT(
+                0, code_unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, 0
+            )
+            sent = send_input(2, events, ctypes.sizeof(INPUT))
+            if sent != 2:
+                raise ctypes.WinError(ctypes.get_last_error())
+        return
+
+    # pynput posts Unicode keystrokes through macOS accessibility services.
+    keyboard.Controller().type(text)
 
 
 class VoiceType:
@@ -92,7 +101,7 @@ class VoiceType:
             self._model = WhisperModel(
                 MODEL_NAME, device="cpu", compute_type="int8", cpu_threads=4
             )
-            self._set_status("Ready. Press Ctrl+Alt+Space to dictate.", notify=True)
+            self._set_status(f"Ready. Press {HOTKEY_LABEL} to dictate.", notify=True)
         except Exception as exc:
             self._set_status(f"Model error: {exc}", notify=True)
 
@@ -123,7 +132,7 @@ class VoiceType:
                 )
                 stream.start()
                 self._stream = stream
-                self._set_status("Recording… press Ctrl+Alt+Space to finish.", notify=True)
+                self._set_status(f"Recording… press {HOTKEY_LABEL} to finish.", notify=True)
             except Exception as exc:
                 self._set_status(f"Microphone error: {exc}", notify=True)
             return
@@ -159,7 +168,7 @@ class VoiceType:
                 self._set_status("No speech recognized. Press the shortcut to try again.", notify=True)
                 return
             type_at_cursor(text)
-            self._set_status("Ready. Press Ctrl+Alt+Space to dictate.", notify=True)
+            self._set_status(f"Ready. Press {HOTKEY_LABEL} to dictate.", notify=True)
         except Exception as exc:
             self._set_status(f"Transcription or typing error: {exc}", notify=True)
         finally:
@@ -181,16 +190,22 @@ class VoiceType:
             self._make_icon(),
             "VoiceType — Loading local model…",
             menu=pystray.Menu(
-                pystray.MenuItem("Ctrl+Alt+Space: start/stop dictation", None, enabled=False),
+                pystray.MenuItem(f"{HOTKEY_LABEL}: start/stop dictation", None, enabled=False),
                 pystray.MenuItem("Quit VoiceType", lambda icon, item: icon.stop()),
             ),
         )
-        keyboard.add_hotkey(HOTKEY, self.toggle_recording, suppress=False)
+        if sys.platform == "win32":
+            keyboard.add_hotkey(HOTKEY, self.toggle_recording, suppress=False)
+            stop_hotkey = lambda: keyboard.remove_hotkey(HOTKEY)
+        else:
+            hotkeys = keyboard.GlobalHotKeys({HOTKEY: self.toggle_recording})
+            hotkeys.start()
+            stop_hotkey = hotkeys.stop
         threading.Thread(target=self._load_model, daemon=True).start()
         try:
             self._icon.run()
         finally:
-            keyboard.remove_hotkey(HOTKEY)
+            stop_hotkey()
             if self._stream:
                 self._stream.stop()
                 self._stream.close()

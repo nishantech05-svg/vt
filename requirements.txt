@@ -1,0 +1,9 @@
+faster-whisper>=1.1,<2
+numpy>=1.26
+Pillow>=10
+pystray>=0.19
+sounddevice>=0.4
+keyboard>=0.13; sys_platform == "win32"
+pynput>=1.7; sys_platform == "darwin"
+pyinstaller>=6.10; sys_platform == "darwin"
+pyinstaller>=6.10; sys_platform == "win32"
