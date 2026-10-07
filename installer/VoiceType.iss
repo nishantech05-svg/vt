@@ -1,5 +1,5 @@
 #define AppName "VoiceType"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 #define AppPublisher "VoiceType"
 #define AppExeName "VoiceType.exe"
 
@@ -15,10 +15,13 @@ OutputDir=..\dist-installer
 OutputBaseFilename=VoiceType-Setup
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\{#AppExeName}
 Uninstallable=yes
 WizardStyle=modern
+CloseApplications=yes
+CloseApplicationsFilter=VoiceType.exe
+RestartApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked

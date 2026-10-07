@@ -21,8 +21,11 @@ if ($pythonOverride) {
 
 $buildPython = Join-Path $projectRoot '.build-venv\Scripts\python.exe'
 & $buildPython -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw 'Could not upgrade pip in the build environment.' }
 & $buildPython -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw 'Could not install the app and packaging dependencies.' }
 & $buildPython -m PyInstaller --clean --noconfirm voice_type_windows.spec
+if ($LASTEXITCODE -ne 0) { throw 'PyInstaller could not build VoiceType.' }
 
 $innoCompiler = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
 if (-not $innoCompiler) {
@@ -39,4 +42,7 @@ if (-not $innoCompiler) {
 }
 
 & $innoCompiler (Join-Path $projectRoot 'installer\VoiceType.iss')
-Write-Host "Windows installer created: $(Join-Path $projectRoot 'dist-installer\VoiceType-Setup.exe')"
+if ($LASTEXITCODE -ne 0) { throw 'Inno Setup could not compile the installer.' }
+$installerPath = Join-Path $projectRoot 'dist-installer\VoiceType-Setup.exe'
+if (-not (Test-Path $installerPath)) { throw 'Inno Setup reported success but no installer file was created.' }
+Write-Host "Windows installer created: $installerPath"

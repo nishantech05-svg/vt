@@ -24,10 +24,18 @@ After building, run `dist-installer\VoiceType-Setup.exe`, choose whether to add 
 
 To build `VoiceType-Setup.exe` from this project on a Windows build machine:
 
-1. Install Python 3.11 (64-bit) and Inno Setup 6 or 7.
-2. Run `Build Windows Installer.ps1` from PowerShell. The build script creates an isolated environment, bundles the runtime with PyInstaller, then creates `dist-installer\VoiceType-Setup.exe`.
+1. Install Python 3.11 or newer (64-bit) and Inno Setup 6 or 7.
+2. Run `Windows_Installer.ps1` from PowerShell. The build script creates an isolated environment, bundles the runtime with PyInstaller, then creates `dist-installer\VoiceType-Setup.exe`.
 
-The installer is a per-machine Windows setup and will request administrator permission. The optional sign-in launch setting is per Windows user. The app itself runs in the tray; exit it from the VoiceType tray menu.
+The installer is per-user and does not need administrator permission. The optional sign-in launch setting is for the current Windows user.
+
+### Windows mini player (0.2.0)
+
+VoiceType opens a small floating panel at the bottom-right, above the taskbar. It shows loading/recording status immediately, with Start and Stop buttons and the latest transcript. The transcript appears after Stop, rather than live while speaking. You can also toggle recording with Ctrl+Alt+Space.
+
+The panel stays above other windows without taking keyboard focus. Select your target document before recording; if you switch to another window before transcription finishes, VoiceType keeps the transcript in the panel instead of typing into the wrong window. Closing the panel quits VoiceType; minimizing keeps the shortcut available. Opening VoiceType again restores the existing panel, including while the speech engine is loading.
+
+When upgrading from 0.1.0, quit all old VoiceType tray instances before installing 0.2.0. Those old processes do not have the instance lock. The new installer also asks running copies to close during an update.
 
 ## Build the Mac app manually
 
@@ -47,7 +55,7 @@ The app bundle is written to `dist/VoiceType.app`. Build on the Mac architecture
 - `base.en` is English-only. CPU inference is used for compatibility.
 - Text insertion uses synthetic keyboard events and does not change the clipboard.
 - Global keyboard monitoring and simulated typing require macOS Accessibility permission. They may not work in elevated or protected applications.
-- Close the app from its menu bar menu. It must be running to listen for the shortcut.
+- On Windows, close the mini player to quit. On Mac, use the menu bar Quit item. The app must remain running to listen for its shortcut.
 
 ## MVP limits
 

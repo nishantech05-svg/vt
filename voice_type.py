@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 import sys
+
+# Acquire the Windows instance lock and show the panel before importing ML libraries.
+if __name__ == "__main__" and sys.platform == "win32":
+    from windows_app import main
+    main()
+    raise SystemExit(0)
+
 import threading
 from typing import Optional
 
@@ -44,7 +51,8 @@ if sys.platform == "win32":
         ]
 
     class INPUT_UNION(ctypes.Union):
-        _fields_ = [("ki", KEYBDINPUT)]
+        # INPUT's union must also accommodate MOUSEINPUT (32 bytes on x64).
+        _fields_ = [("ki", KEYBDINPUT), ("padding", ctypes.c_byte * (32 if ctypes.sizeof(ctypes.c_void_p) == 8 else 24))]
 
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wintypes.DWORD), ("union", INPUT_UNION)]
@@ -79,7 +87,10 @@ def type_at_cursor(text: str) -> None:
 
 
 class VoiceType:
-    def __init__(self) -> None:
+    def __init__(self, on_status=None, on_transcript=None, insert_text=None) -> None:
+        self._on_status = on_status
+        self._on_transcript = on_transcript
+        self._insert_text = insert_text or type_at_cursor
         self._lock = threading.Lock()
         self._frames: list[np.ndarray] = []
         self._stream: Optional[sd.InputStream] = None
@@ -90,6 +101,8 @@ class VoiceType:
 
     def _set_status(self, status: str, notify: bool = False) -> None:
         self._status = status
+        if self._on_status:
+            self._on_status(status)
         if self._icon:
             self._icon.title = f"VoiceType — {status}"
             if notify:
@@ -167,7 +180,9 @@ class VoiceType:
             if not text:
                 self._set_status("No speech recognized. Press the shortcut to try again.", notify=True)
                 return
-            type_at_cursor(text)
+            if self._on_transcript:
+                self._on_transcript(text)
+            self._insert_text(text)
             self._set_status(f"Ready. Press {HOTKEY_LABEL} to dictate.", notify=True)
         except Exception as exc:
             self._set_status(f"Transcription or typing error: {exc}", notify=True)

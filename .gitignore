@@ -1,0 +1,8 @@
+.build-venv/
+build/
+dist/
+dist-installer/
+__pycache__/
+*.py[cod]
+.cache/
+build-*.log
